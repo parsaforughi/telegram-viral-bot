@@ -22,3 +22,5 @@ bot.launch()
 ['SIGINT', 'SIGTERM'].forEach((signal) => {
   process.once(signal, () => bot.stop(signal));
 });
+
+import './server.js';

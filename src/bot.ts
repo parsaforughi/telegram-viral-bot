@@ -1,14 +1,19 @@
 import type {Context} from 'telegraf';
 import {Markup, Telegraf} from 'telegraf';
 import {searchInstagramPosts} from './instagram.js';
+import {searchTikTokPosts} from './tiktok.js';
+import {searchYouTubePosts} from './youtube.js';
 import {
   categoryKeyboard,
   cleanserSubmenu,
   creamSubmenu,
   languageKeyboard,
+  platformKeyboard,
   formatPostMessage,
   texts,
-  viewKeyboard
+  viewKeyboard,
+  getPlatformLabel,
+  getPlatformEmoji
 } from './messages.js';
 import {getUserState, recordUserResults, upsertUserState} from './state.js';
 import type {ViralPost} from './types.js';
@@ -41,20 +46,44 @@ const resolveCallbackData = (ctx: Context): string | undefined => {
   return undefined;
 };
 
-const keywordMap: Record<string, string> = {
-  cat_condom: 'کاندوم',
-  cat_cream: 'کرم',
-  sub_cream_hand: 'کرم دست',
-  sub_cream_foot: 'کرم پا',
-  sub_cream_body: 'کرم بدن',
-  cat_cleanser: 'پاک کننده آرایشی',
-  sub_cleanser_wetwipe: 'دستمال مرطوب',
-  sub_cleanser_micellar: 'میسلار',
-  sub_cleanser_facewash: 'فیس واش',
-  cat_serum: 'سرم صورت',
-  cat_toothpaste: 'خمیر دندان',
-  cat_cosmetic: 'لوازم آرایشی',
-  cat_handbalm: 'بالم دست'
+const keywordMapFA: Record<string, string> = {
+  condom: 'کاندوم',
+  toothpaste: 'خمیر دندان',
+  cream: 'کرم',
+  hand_cream: 'کرم دست',
+  body_lotion: 'کرم بدن',
+  makeup_remover: 'پاک کننده آرایشی',
+  face_wash: 'فیس واش'
+};
+
+const keywordMapEN: Record<string, string> = {
+  condom: 'condom',
+  toothpaste: 'toothpaste',
+  cream: 'cream',
+  hand_cream: 'hand cream',
+  body_lotion: 'body lotion',
+  makeup_remover: 'makeup remover',
+  face_wash: 'face wash'
+};
+
+const normalizeCategoryKey = (category?: string): string => {
+  if (!category) {
+    return 'instagram';
+  }
+  const overrideMap: Record<string, string> = {
+    sub_cream_hand: 'hand_cream',
+    sub_cream_foot: 'hand_cream',
+    sub_cream_body: 'body_lotion',
+    cat_cleanser: 'makeup_remover',
+    sub_cleanser_wetwipe: 'makeup_remover',
+    sub_cleanser_micellar: 'makeup_remover',
+    sub_cleanser_facewash: 'face_wash',
+    cat_cosmetic: 'makeup_remover'
+  };
+  if (overrideMap[category]) {
+    return overrideMap[category];
+  }
+  return category.replace(/^cat_/, '').replace(/^sub_/, '');
 };
 
 const BATCH_SIZE = 5;
@@ -72,6 +101,18 @@ export const buildBot = (token: string) => {
   }
 
   const bot = new Telegraf(token);
+  bot.catch((error) => {
+    const response = (error as any).response;
+    if (
+      response?.error_code === 400 &&
+      typeof response.description === 'string' &&
+      response.description.includes('query is too old')
+    ) {
+      console.warn('⚠️ Ignored expired callback query');
+      return;
+    }
+    throw error;
+  });
 
   bot.start(async (ctx) => {
     const chatId = ctx.chat?.id;
@@ -80,6 +121,28 @@ export const buildBot = (token: string) => {
     }
 
     upsertUserState(chatId, {});
+    await ctx.reply(texts.askPlatform, platformKeyboard());
+  });
+
+  bot.action(/^platform_(instagram|tiktok|youtube)$/, async (ctx) => {
+    console.log('🟣 [BOT] Callback data:', resolveCallbackData(ctx));
+    const chatId = ctx.chat?.id;
+    if (!chatId) {
+      return;
+    }
+
+    const callback = ctx.callbackQuery;
+    const data = callback && 'data' in callback ? callback.data : '';
+    if (!data.startsWith('platform_')) {
+      return;
+    }
+
+    const platform = data.replace('platform_', '') as 'instagram' | 'tiktok' | 'youtube';
+    upsertUserState(chatId, {platform});
+    await clearInlineKeyboard(ctx);
+    await ctx.answerCbQuery();
+
+    // Continue with category selection for all platforms
     await ctx.reply(texts.askCategory, categoryKeyboard());
   });
 
@@ -165,7 +228,10 @@ export const buildBot = (token: string) => {
       return;
     }
 
-    const state = upsertUserState(chatId, {minViews});
+    const currentState = getUserState(chatId);
+    // Ensure platform is set (default to instagram if not set)
+    const platform = currentState?.platform ?? 'instagram';
+    const state = upsertUserState(chatId, {minViews, platform});
     await ctx.answerCbQuery();
 
     if (!state.category) {
@@ -173,16 +239,17 @@ export const buildBot = (token: string) => {
       return;
     }
 
-    const progressMessage = await ctx.reply('⏳ در حال جستجو… 0%');
+    const platformLabel = getPlatformLabel(platform);
+    const progressMessage = await ctx.reply(texts.searchingProgress(platformLabel, 0));
     const progressChatId = progressMessage.chat?.id ?? chatId;
     const progressMessageId = progressMessage.message_id;
     let stopProgress = false;
     const progressStages = [
-      '⏳ در حال جستجو… 10%',
-      '⏳ در حال جستجو… 25%',
-      '⏳ در حال جستجو… 50%',
-      '⏳ در حال جستجو… 75%',
-      '⏳ آماده‌سازی نتایج… 90%'
+      texts.searchingProgress(platformLabel, 10),
+      texts.searchingProgress(platformLabel, 25),
+      texts.searchingProgress(platformLabel, 50),
+      texts.searchingProgress(platformLabel, 75),
+      `⏳ آماده‌سازی نتایج از ${platformLabel}… 90%`
     ];
     const progressUpdater = (async () => {
       for (const stage of progressStages) {
@@ -206,19 +273,41 @@ export const buildBot = (token: string) => {
       }
     })();
 
+    const categoryKey = normalizeCategoryKey(state.category);
     const query = state.category ?? 'instagram';
-    const finalKeyword = keywordMap[state.category ?? ''] ?? query;
+    const finalKeyword =
+      state.language === 'fa'
+        ? keywordMapFA[categoryKey] ?? categoryKey
+        : keywordMapEN[categoryKey] ?? categoryKey;
+    console.log('🔵 [BOT] Platform:', platform);
     console.log('🔵 [BOT] Category:', state.category);
     console.log('🔵 [BOT] Query (raw):', query);
     console.log('🔵 [BOT] Final keyword:', finalKeyword);
     console.log('🔵 [BOT] Language:', state.language);
     console.log('🔵 [BOT] minViews:', state.minViews ?? minViews);
 
-    const results = await searchInstagramPosts({
-      category: finalKeyword,
-      language: state.language ?? DEFAULT_LANGUAGE,
-      minViews
-    });
+    let results: ViralPost[] = [];
+    if (platform === 'tiktok') {
+      results = await searchTikTokPosts({
+        category: finalKeyword,
+        language: state.language ?? DEFAULT_LANGUAGE,
+        minViews
+      });
+    } else if (platform === 'youtube') {
+      results = await searchYouTubePosts({
+        category: finalKeyword,
+        language: state.language ?? DEFAULT_LANGUAGE,
+        minViews,
+        videoType: 'video' // Default to regular videos for now
+      });
+    } else {
+      // Default to Instagram
+      results = await searchInstagramPosts({
+        category: finalKeyword,
+        language: state.language ?? DEFAULT_LANGUAGE,
+        minViews
+      });
+    }
 
     stopProgress = true;
     await progressUpdater.catch(() => {});
@@ -227,7 +316,7 @@ export const buildBot = (token: string) => {
         progressChatId,
         progressMessageId,
         undefined,
-        '✔ نتایج آماده شد!'
+        texts.resultsReady(platformLabel)
       );
     } catch {
       // ignore
@@ -255,11 +344,11 @@ export const buildBot = (token: string) => {
       const number = idx + 1;
       await ctx.replyWithHTML(formatPostMessage(post, number, enNum));
     }
-
+    
     if (initialSent < totalResults) {
-      const promptText = `📦 تا الان ${enNum(initialSent)} تا از ${enNum(
+      const promptText = `${enNum(initialSent)} از ${enNum(
         totalResults
-      )} پست رو برات فرستادم.\nادامه بدم؟ 🔎`;
+      )} ویدیو وایرال از ${platformLabel} ارسال شد. ادامه بدم؟`;
       await ctx.reply(promptText, continueKeyboard);
     } else {
       await ctx.reply('تمام شد! ✔️');
@@ -298,10 +387,13 @@ export const buildBot = (token: string) => {
     const newSent = alreadySent + nextBatch.length;
     upsertUserState(chatId, {offset: newOffset, sent: newSent});
 
+    const platform = state?.platform ?? 'instagram';
+    const platformLabel = getPlatformLabel(platform);
+    
     if (newOffset < results.length) {
-      const promptText = `📦 تا الان ${enNum(newSent)} تا از ${enNum(
+      const promptText = `${enNum(newSent)} از ${enNum(
         total
-      )} پست رو برات فرستادم.\nادامه بدم؟ 🔎`;
+      )} ویدیو وایرال از ${platformLabel} ارسال شد. ادامه بدم؟`;
       await ctx.reply(promptText, continueKeyboard);
     } else {
       await ctx.reply('تمام شد! ✔️');

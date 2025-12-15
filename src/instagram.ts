@@ -18,9 +18,9 @@ const buildRunUrl = (): string => {
   return `${APIFY_RUN_URL}?token=${encodeURIComponent(token)}`;
 };
 
-const buildDatasetUrl = (datasetId: string): string => {
+const buildDatasetUrl = (): string => {
   const token = ensureToken();
-  return `https://api.apify.com/v2/datasets/${datasetId}/items?token=${encodeURIComponent(token)}`;
+  return `https://api.apify.com/v2/acts/apify~instagram-hashtag-scraper/runs/last/dataset/items?token=${encodeURIComponent(token)}`;
 };
 
 type ApifyResult = Record<string, unknown>;
@@ -129,15 +129,13 @@ export const searchInstagramPosts = async (
       console.log('🔴 [API] JSON parse error on RUN:', err);
     }
 
-    const datasetId = runJson?.data?.defaultDatasetId;
-    if (!datasetId) {
-      return [];
-    }
+    // Wait a bit for the run to start before querying the dataset
+    await sleep(2000);
 
     let datasetItems: DatasetResponse = [];
     for (let attempt = 0; attempt < MAX_DATASET_RETRIES; attempt += 1) {
-      console.log('🟡 [API] Fetching dataset:', datasetId);
-      const datasetRes = await fetch(buildDatasetUrl(datasetId), {
+      console.log('🟡 [API] Fetching dataset from last run');
+      const datasetRes = await fetch(buildDatasetUrl(), {
         signal: controller.signal
       });
 

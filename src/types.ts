@@ -12,6 +12,8 @@ export interface ViralPost {
 
 export interface UserState {
   chatId: number;
+  platform?: 'instagram' | 'tiktok' | 'youtube';
+  youtubeVideoType?: 'video' | 'shorts';
   category?: string;
   language?: 'fa' | 'en';
   minViews?: number;

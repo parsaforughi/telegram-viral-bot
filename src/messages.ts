@@ -44,6 +44,16 @@ export const categoryKeyboard = () => {
   return Markup.inlineKeyboard(buttons);
 };
 
+export const platformKeyboard = () => {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('📸 اینستاگرام', 'platform_instagram'),
+      Markup.button.callback('🎵 تیک‌تاک', 'platform_tiktok')
+    ],
+    [Markup.button.callback('▶️ یوتیوب (Shorts)', 'platform_youtube')]
+  ]);
+};
+
 export const languageKeyboard = () => {
   return Markup.inlineKeyboard([
     [
@@ -67,6 +77,13 @@ export const cleanserSubmenu = Markup.inlineKeyboard([
     Markup.button.callback('💧 میسلار واتر', 'sub_cleanser_micellar')
   ],
   [Markup.button.callback('🧼 فیس واش', 'sub_cleanser_facewash')]
+]);
+
+export const youtubeVideoTypeMenu = Markup.inlineKeyboard([
+  [
+    Markup.button.callback('▶️ ویدیو', 'youtube_video'),
+    Markup.button.callback('📱 شورتز', 'youtube_shorts')
+  ]
 ]);
 
 type ViewKeyboardPayload = {
@@ -128,16 +145,49 @@ export function formatPostMessage(
   ].join('\n');
 }
 
+export const getPlatformLabel = (platform?: 'instagram' | 'tiktok' | 'youtube'): string => {
+  switch (platform) {
+    case 'instagram':
+      return 'اینستاگرام';
+    case 'tiktok':
+      return 'تیک‌تاک';
+    case 'youtube':
+      return 'یوتیوب';
+    default:
+      return 'اینستاگرام';
+  }
+};
+
+export const getPlatformEmoji = (platform?: 'instagram' | 'tiktok' | 'youtube'): string => {
+  switch (platform) {
+    case 'instagram':
+      return '📸';
+    case 'tiktok':
+      return '🎵';
+    case 'youtube':
+      return '▶️';
+    default:
+      return '📸';
+  }
+};
+
 export const texts = {
+  askPlatform: '🎯 لطفاً پلتفرم مورد نظر را انتخاب کن',
   askCategory: '🌸 لطفاً دسته‌بندی مورد نظر را انتخاب کن',
   askLanguage: '🎯 زبان دلخواهت رو انتخاب کن',
   chooseCream: '🌿 لطفاً نوع کرم مورد نظر را انتخاب کن',
   chooseCleanser: '✨ کدام پاک‌کننده را مدنظر داری؟',
+  askYoutubeType: '📹 نوع محتوای یوتیوب رو انتخاب کن',
   askMinViews: '👀 حداقل تعداد بازدید رو انتخاب کن',
   noPosts: 'هیچ ویدیوی وایرالی با این شرایط پیدا نشد. یه کلمه یا بازدید حداقلی دیگه امتحان کن ✨',
   noMorePosts: '✅ فعلاً پست جدیدی برای نمایش وجود ندارد.',
   closing: '🙏 ممنون که از ربات جستجوی ناب استفاده کردی.',
   showMorePrompt: '🔎 مایل هستی پست‌های بیشتر ببینی؟',
   batchNotice: '⬆️ دو پست ارسال شد، ادامه می‌دیم...',
-  progressLabel: (percent: number) => `⏳ در حال آماده‌سازی نتایج... ${percent}%`
+  progressLabel: (percent: number) => `⏳ در حال آماده‌سازی نتایج... ${percent}%`,
+  platformComingSoon: '🚧 این پلتفرم به‌زودی فعال می‌شود.',
+  searchingProgress: (platform: string, percent: number) => `⏳ در حال جستجو در ${platform}… ${percent}%`,
+  resultsReady: (platform: string) => `✔ نتایج وایرال از ${platform} آماده شد!`,
+  paginationPrompt: (sent: number, total: number, platform: string, itemType: string = 'ویدیو') => 
+    `${sent} از ${total} ${itemType} وایرال از ${platform} ارسال شد. ادامه بدم؟`
 };
