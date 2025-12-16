@@ -17,6 +17,8 @@ import {
 } from './messages.js';
 import {getUserState, recordUserResults, upsertUserState} from './state.js';
 import type {ViralPost} from './types.js';
+import {trackSearchRequest} from './tracking.js';
+import {broadcastLog} from './server.js';
 
 const DEFAULT_LANGUAGE: 'en' | 'fa' = 'en';
 
@@ -323,6 +325,30 @@ export const buildBot = (token: string) => {
     }
 
     const filtered = results.filter((post) => post.views >= minViews);
+
+    // Track the search request
+    const searchRequest = trackSearchRequest({
+      userId: chatId,
+      platform,
+      category: state.category || 'unknown',
+      language: state.language ?? DEFAULT_LANGUAGE,
+      minViews,
+      resultsCount: filtered.length,
+      status: filtered.length > 0 ? 'success' : 'no_results'
+    });
+    
+    // Broadcast log to SSE clients
+    broadcastLog({
+      id: searchRequest.id,
+      userId: chatId,
+      platform,
+      category: state.category?.replace(/^(cat_|sub_)/i, '').replace(/_/g, ' ') || 'unknown',
+      language: state.language === 'fa' ? 'Persian' : 'English',
+      minViews,
+      resultsCount: filtered.length,
+      timestamp: searchRequest.timestamp.toISOString(),
+      status: searchRequest.status
+    });
 
     if (filtered.length === 0) {
       await ctx.reply(texts.noPosts);
