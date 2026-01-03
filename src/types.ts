@@ -22,4 +22,5 @@ export interface UserState {
   batchSize?: number;
   sent?: number;
   total?: number;
+  waitingForCustomCategory?: boolean;
 }

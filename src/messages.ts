@@ -39,7 +39,8 @@ export const categoryKeyboard = () => {
       Markup.button.callback(categoryLabels.serum, 'cat_serum'),
       Markup.button.callback(categoryLabels.toothpaste, 'cat_toothpaste')
     ],
-    [Markup.button.callback(categoryLabels.cleanser, 'cat_cleanser')]
+    [Markup.button.callback(categoryLabels.cleanser, 'cat_cleanser')],
+    [Markup.button.callback('✏️ دسته‌بندی دلخواه', 'custom_category')]
   ];
   return Markup.inlineKeyboard(buttons);
 };
@@ -174,6 +175,7 @@ export const getPlatformEmoji = (platform?: 'instagram' | 'tiktok' | 'youtube'):
 export const texts = {
   askPlatform: '🎯 لطفاً پلتفرم مورد نظر را انتخاب کن',
   askCategory: '🌸 لطفاً دسته‌بندی مورد نظر را انتخاب کن',
+  askCustomCategory: '✏️ لطفاً دسته‌بندی دلخواه خود را تایپ کن:',
   askLanguage: '🎯 زبان دلخواهت رو انتخاب کن',
   chooseCream: '🌿 لطفاً نوع کرم مورد نظر را انتخاب کن',
   chooseCleanser: '✨ کدام پاک‌کننده را مدنظر داری؟',

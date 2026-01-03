@@ -72,6 +72,12 @@ const normalizeCategoryKey = (category?: string): string => {
   if (!category) {
     return 'instagram';
   }
+  
+  // Handle custom category
+  if (category.startsWith('custom_')) {
+    return category.replace('custom_', '');
+  }
+  
   const overrideMap: Record<string, string> = {
     sub_cream_hand: 'hand_cream',
     sub_cream_foot: 'hand_cream',
@@ -124,6 +130,38 @@ export const buildBot = (token: string) => {
 
     upsertUserState(chatId, {});
     await ctx.reply(texts.askPlatform, platformKeyboard());
+  });
+
+  // Handle custom category text input
+  bot.on('text', async (ctx) => {
+    const chatId = ctx.chat?.id;
+    if (!chatId) {
+      return;
+    }
+
+    const state = getUserState(chatId);
+    
+    // Check if user is waiting for custom category input
+    if (state?.waitingForCustomCategory && state?.platform) {
+      const customCategory = ctx.message.text?.trim();
+      
+      if (!customCategory || customCategory.length === 0) {
+        await ctx.reply('لطفاً یک دسته‌بندی معتبر وارد کن.');
+        return;
+      }
+
+      // Store custom category (prefixed to distinguish from predefined)
+      upsertUserState(chatId, {
+        category: `custom_${customCategory}`,
+        waitingForCustomCategory: false
+      });
+
+      // Continue to language selection
+      await ctx.reply(texts.askLanguage, languageKeyboard());
+      return;
+    }
+    
+    // If not waiting for custom category, ignore the text (or handle other text commands)
   });
 
   bot.action(/^platform_(instagram|tiktok|youtube)$/, async (ctx) => {
@@ -193,6 +231,20 @@ export const buildBot = (token: string) => {
     await clearInlineKeyboard(ctx);
     await ctx.answerCbQuery();
     await ctx.reply(texts.askLanguage, languageKeyboard());
+  });
+
+  bot.action('custom_category', async (ctx) => {
+    console.log('🟣 [BOT] Custom category selected');
+    const chatId = ctx.chat?.id;
+    if (!chatId) {
+      return;
+    }
+
+    await clearInlineKeyboard(ctx);
+    await ctx.answerCbQuery();
+    
+    upsertUserState(chatId, {waitingForCustomCategory: true});
+    await ctx.reply(texts.askCustomCategory);
   });
 
   bot.action(/^(lang_fa|lang_en)$/, async (ctx) => {
