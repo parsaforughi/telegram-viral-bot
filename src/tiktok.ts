@@ -4,6 +4,7 @@ const APIFY_RUN_URL = 'https://api.apify.com/v2/acts/clockworks~tiktok-scraper/r
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_DATASET_RETRIES = 20;
 const DATASET_RETRY_DELAY = 3000;
+const STATUS_CHECK_TIMEOUT_MS = 10_000; // 10 seconds for status checks
 
 const ensureToken = (): string => {
   const token = process.env.APIFY_API_TOKEN;
@@ -184,22 +185,39 @@ export const searchTikTokPosts = async (
         waitAttempts++;
         
         try {
-          const statusRes = await fetch(buildRunStatusUrl(runId), {
-            signal: controller.signal
-          });
+          // Use a separate AbortController for status checks to avoid timeout issues
+          const statusController = new AbortController();
+          const statusTimeout = setTimeout(() => statusController.abort(), STATUS_CHECK_TIMEOUT_MS);
           
-          if (statusRes.ok) {
-            const statusJson = await statusRes.json();
-            runStatus = statusJson.data?.status || runStatus;
-            console.log(`🟡 [TikTok API] Run status (attempt ${waitAttempts}):`, runStatus);
+          try {
+            const statusRes = await fetch(buildRunStatusUrl(runId), {
+              signal: statusController.signal
+            });
             
-            if (runStatus === 'FAILED') {
-              console.error('🔴 [TikTok API] Run failed');
-              return [];
+            if (statusRes.ok) {
+              const statusJson = await statusRes.json();
+              runStatus = statusJson.data?.status || runStatus;
+              console.log(`🟡 [TikTok API] Run status (attempt ${waitAttempts}):`, runStatus);
+              
+              if (runStatus === 'FAILED') {
+                console.error('🔴 [TikTok API] Run failed');
+                clearTimeout(statusTimeout);
+                return [];
+              }
             }
+          } catch (statusErr) {
+            // Ignore abort errors for status checks - they're not critical
+            if (statusErr instanceof Error && statusErr.name !== 'AbortError') {
+              console.log('⚠️ [TikTok API] Error checking run status:', statusErr);
+            }
+          } finally {
+            clearTimeout(statusTimeout);
           }
         } catch (err) {
-          console.log('⚠️ [TikTok API] Error checking run status:', err);
+          // Ignore errors, continue polling
+          if (err instanceof Error && err.name !== 'AbortError') {
+            console.log('⚠️ [TikTok API] Error in status check loop:', err);
+          }
         }
       }
 
