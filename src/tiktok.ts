@@ -120,7 +120,24 @@ export const searchTikTokPosts = async (
       return [];
     }
 
-    const datasetItems: DatasetResponse = await response.json();
+    let datasetItems: DatasetResponse = [];
+    try {
+      const responseData = await response.json();
+      // Handle both array response and wrapped response
+      if (Array.isArray(responseData)) {
+        datasetItems = responseData;
+      } else if (responseData && Array.isArray(responseData.data)) {
+        datasetItems = responseData.data;
+      } else if (responseData && responseData.items && Array.isArray(responseData.items)) {
+        datasetItems = responseData.items;
+      } else {
+        console.error('🔴 [TikTok API] Unexpected response format:', typeof responseData);
+        return [];
+      }
+    } catch (parseErr) {
+      console.error('🔴 [TikTok API] JSON parse error:', parseErr);
+      return [];
+    }
     
     if (!datasetItems || datasetItems.length === 0) {
       console.log('🟡 [TikTok API] No results returned');
